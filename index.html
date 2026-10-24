@@ -1,5 +1,13 @@
 <!DOCTYPE html>
 <html lang="en"><head>
+<script>
+(function(){var shown=false;function bn(msg){if(shown)return;shown=true;var d=document.createElement("div");d.setAttribute("role","alert");d.style.cssText="position:fixed;left:0;right:0;top:0;z-index:99;background:#3b0714;color:#fff;padding:14px 16px;font:14px/1.5 system-ui,sans-serif;border-bottom:2px solid #f87171";d.innerHTML='<b>STARINTEL PRO hit a problem.</b><br><span id="sn_m"></span><div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap"><button id="sn_b" style="padding:10px 14px;border-radius:8px;border:0">Download backup of my saved data</button><button id="sn_r" style="padding:10px 14px;border-radius:8px;border:0">Reset saved data and reload</button></div>';document.body.appendChild(d);document.getElementById("sn_m").textContent=msg;
+document.getElementById("sn_b").onclick=function(){try{var t=localStorage.getItem("starintel")||"{}",b=new Blob([t],{type:"application/json"}),a=document.createElement("a");a.href=URL.createObjectURL(b);a.download="starintel-backup.json";document.body.appendChild(a);a.click();a.remove()}catch(e){alert("Could not read saved data.")}};
+document.getElementById("sn_r").onclick=function(){if(confirm("This deletes your saved profiles, notes and interests from this browser. Download the backup first. Continue?")){try{localStorage.removeItem("starintel")}catch(e){}location.reload()}}}
+window.addEventListener("error",function(e){bn("Error: "+(e.message||"unknown")+". Try reloading. If it keeps happening, download a backup, then reset.")});
+window.addEventListener("load",function(){setTimeout(function(){if(!window.__siOk)bn("The app did not finish starting. The file may be incomplete or damaged (for example cut off while pasting). Re-upload index.html.")},1200)})})();
+</script>
+
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="theme-color" content="#070914">
@@ -161,7 +169,7 @@ details summary{cursor:pointer}table td{padding:4px 6px;border-bottom:1px solid 
 <div class="row"><button class="btn s" id="n_exp">Export JSON</button><button class="btn s" id="n_imp">Import JSON</button><input type="file" id="n_file" accept=".json,application/json" class="hide"></div>
 <label style="display:block;margin-top:12px">Celebrity (optional)</label><input id="n_cel" list="n_dl" placeholder="Link this note to a celebrity"><datalist id="n_dl"></datalist><label>Quick note</label><textarea id="n_txt" rows="3"></textarea><button class="btn" id="n_add">Add note</button></div>
 <div class="card"><h3>Research by celebrity</h3><div id="n_cel_list"></div></div><div id="nlist"></div></section>
-</main></div></div><nav id="tabs" aria-label="Main navigation"><button data-v="home"><svg class="ic" aria-hidden="true"><use href="#i-home"/></svg>Overview</button><button data-v="discover"><svg class="ic" aria-hidden="true"><use href="#i-compass"/></svg>Discover</button><button data-v="search" data-also="profile"><svg class="ic" aria-hidden="true"><use href="#i-search"/></svg>Search</button><button data-v="audience" data-also="interests"><svg class="ic" aria-hidden="true"><use href="#i-target"/></svg>Ads</button><button id="mbtn" aria-expanded="false" aria-controls="more"><svg class="ic" aria-hidden="true"><use href="#i-more"/></svg>More</button></nav><div id="more" class="hide"><button data-v="ask"><svg class="ic" aria-hidden="true"><use href="#i-chat"/></svg>Ask</button><button data-v="saved"><svg class="ic" aria-hidden="true"><use href="#i-bookmark"/></svg>Watchlist</button><button data-v="notes"><svg class="ic" aria-hidden="true"><use href="#i-book"/></svg>Research notebook</button><button data-v="reports"><svg class="ic" aria-hidden="true"><use href="#i-file"/></svg>Reports</button><button data-v="fans"><svg class="ic" aria-hidden="true"><use href="#i-users"/></svg>Fan-page names</button></div>
+<div class="m" style="text-align:center;font-size:11px;padding:6px 0 0">STARINTEL PRO · build 2026-10-24.2</div></main></div></div><nav id="tabs" aria-label="Main navigation"><button data-v="home"><svg class="ic" aria-hidden="true"><use href="#i-home"/></svg>Overview</button><button data-v="discover"><svg class="ic" aria-hidden="true"><use href="#i-compass"/></svg>Discover</button><button data-v="search" data-also="profile"><svg class="ic" aria-hidden="true"><use href="#i-search"/></svg>Search</button><button data-v="audience" data-also="interests"><svg class="ic" aria-hidden="true"><use href="#i-target"/></svg>Ads</button><button id="mbtn" aria-expanded="false" aria-controls="more"><svg class="ic" aria-hidden="true"><use href="#i-more"/></svg>More</button></nav><div id="more" class="hide"><button data-v="ask"><svg class="ic" aria-hidden="true"><use href="#i-chat"/></svg>Ask</button><button data-v="saved"><svg class="ic" aria-hidden="true"><use href="#i-bookmark"/></svg>Watchlist</button><button data-v="notes"><svg class="ic" aria-hidden="true"><use href="#i-book"/></svg>Research notebook</button><button data-v="reports"><svg class="ic" aria-hidden="true"><use href="#i-file"/></svg>Reports</button><button data-v="fans"><svg class="ic" aria-hidden="true"><use href="#i-users"/></svg>Fan-page names</button></div>
 <script>
 (function(){
 "use strict";
@@ -169,7 +177,7 @@ var $=function(i){return document.getElementById(i)};
 function esc(s){return String(s==null?"":s).replace(/[&<>"']/g,function(c){return{"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]})}
 function toast(t){var e=document.createElement("div");e.className="toast";e.textContent=t;document.body.appendChild(e);setTimeout(function(){e.remove()},2200)}
 var DB={saved:[],notes:[],interests:[],settings:{expiryDays:30},recent:[]};
-function load(){try{var d=JSON.parse(localStorage.getItem("starintel")||"null");if(d){DB.saved=d.saved||[];DB.notes=d.notes||[];DB.interests=d.interests||[];DB.settings=d.settings||{expiryDays:30};DB.recent=d.recent||[]}}catch(e){}}
+function load(){try{var d=JSON.parse(localStorage.getItem("starintel")||"null");if(d&&typeof d==="object"&&!Array.isArray(d)){var A=function(x,k){return Array.isArray(x)?x.filter(function(i){return i&&typeof i==="object"&&(!k||typeof i[k]==="string")}):[]};DB.saved=A(d.saved,"title");DB.notes=A(d.notes);DB.interests=A(d.interests,"name");DB.recent=A(d.recent,"title");DB.settings=(d.settings&&typeof d.settings==="object"&&!Array.isArray(d.settings))?d.settings:{};DB.settings.expiryDays=+DB.settings.expiryDays>0?+DB.settings.expiryDays:30}}catch(e){}}
 function save(){try{localStorage.setItem("starintel",JSON.stringify(DB));return true}catch(e){toast("Could not save (browser storage blocked)");return false}}
 load();
 var cur=null,lastView="search";
@@ -594,17 +602,4 @@ function askGo(){var q=$("ask_q").value.trim(),o=$("ask_out");$("ask_ai").innerH
    var b=this,ao=$("ask_ai");if(aiUsed()>=gLimit()){ao.innerHTML='<div class="card note err">You reached today’s limit of '+gLimit()+' AI summaries (you can change it in AI setup). The data answer above is still valid.</div>';return}
    b.disabled=true;busy(ao,"Asking the AI to summarise…");
    gAsk(q,r.data).then(function(ans){
-    aiBump();var hay=(JSON.stringify(r.data)+" "+q).replace(/,/g,""),bad=(ans.match(/\d[\d,.]*\d|\d/g)||[]).map(function(n){return n.replace(/,/g,"").replace(/\.$/,"")}).filter(function(n){return hay.indexOf(n)<0});
-    ao.innerHTML='<div class="card"><div class="note" style="margin-top:0"><b>AI summary</b> (generated from the data above, so check it against the sources)</div><p style="white-space:pre-wrap;margin:0">'+esc(ans)+'</p>'+(bad.length?'<div class="note err">Warning: this summary contains figures ('+esc(bad.slice(0,4).join(", "))+') that are not in the data above. Do not rely on it.</div>':'')+'</div>';b.disabled=false}).catch(function(e){fail(ao,e.message);b.disabled=false})}
- }).catch(function(e){fail(o,e.message,askGo)})}
-
-function csvC(v){v=String(v==null?"":v);if(/^[=+\-@\t\r]/.test(v))v="'"+v;return '"'+v.replace(/"/g,'""')+'"'}
-function iLabel(r){return iSt(r).b.replace(/<[^>]+>/g,"")}
-function evLabel(s){return s==="VERIFIED"?"VERIFIED":s==="CANCELLED_OR_RESCHEDULED"?"CANCELLED OR RESCHEDULED":"UNCONFIRMED"}
-function fillRp(){var n={};DB.saved.forEach(function(x){n[x.name||x.title]=1});DB.interests.forEach(function(x){n[x.celeb]=1});DB.recent.forEach(function(x){n[x.title]=1});$("rp_dl").innerHTML=Object.keys(n).filter(Boolean).map(function(x){return '<option value="'+esc(x)+'">'}).join("")}
-function fetchProf(title){return get("https://en.wikipedia.org/api/rest_v1/page/summary/"+encodeURIComponent(title.replace(/ /g,"_"))).then(function(s0){
- var P={title:s0.title,name:s0.title,desc:s0.description||"",extract:s0.extract||"",thumb:s0.thumbnail&&s0.thumbnail.source,url:s0.content_urls&&s0.content_urls.desktop.page,qid:s0.wikibase_item,occ:[],nat:[],genre:[],site:"",social:[],born:""};
- if(!P.qid)return P;
- return get("https://www.wikidata.org/w/api.php?action=wbgetentities&format=json&origin=*&props=claims&ids="+P.qid).then(function(d){var c=((d.entities||{})[P.qid]||{}).claims||{},oi=ids(c,"P106"),ni=ids(c,"P27"),gi=ids(c,"P136"),w=claim(c,"P856")[0],b=claim(c,"P569")[0];
-  if(w&&/^https?:\/\//.test(w))P.site=w;if(b&&b.time)P.born=b.time.replace(/^\+/,"").slice(0,10);
-  [["P2003","Instagram","https://www.instagram.com/"],["P2002","X / Twitter","https://x.com/"],["P
+    aiBump();var hay=(JSON.st
