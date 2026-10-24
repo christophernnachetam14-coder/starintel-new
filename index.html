@@ -602,4 +602,110 @@ function askGo(){var q=$("ask_q").value.trim(),o=$("ask_out");$("ask_ai").innerH
    var b=this,ao=$("ask_ai");if(aiUsed()>=gLimit()){ao.innerHTML='<div class="card note err">You reached today’s limit of '+gLimit()+' AI summaries (you can change it in AI setup). The data answer above is still valid.</div>';return}
    b.disabled=true;busy(ao,"Asking the AI to summarise…");
    gAsk(q,r.data).then(function(ans){
-    aiBump();var hay=(JSON.st
+    aiBump();var hay=(JSON.stringify(r.data)+" "+q).replace(/,/g,""),bad=(ans.match(/\d[\d,.]*\d|\d/g)||[]).map(function(n){return n.replace(/,/g,"").replace(/\.$/,"")}).filter(function(n){return hay.indexOf(n)<0});
+    ao.innerHTML='<div class="card"><div class="note" style="margin-top:0"><b>AI summary</b> (generated from the data above, so check it against the sources)</div><p style="white-space:pre-wrap;margin:0">'+esc(ans)+'</p>'+(bad.length?'<div class="note err">Warning: this summary contains figures ('+esc(bad.slice(0,4).join(", "))+') that are not in the data above. Do not rely on it.</div>':'')+'</div>';b.disabled=false}).catch(function(e){fail(ao,e.message);b.disabled=false})}
+ }).catch(function(e){fail(o,e.message,askGo)})}
+
+function csvC(v){v=String(v==null?"":v);if(/^[=+\-@\t\r]/.test(v))v="'"+v;return '"'+v.replace(/"/g,'""')+'"'}
+function iLabel(r){return iSt(r).b.replace(/<[^>]+>/g,"")}
+function evLabel(s){return s==="VERIFIED"?"VERIFIED":s==="CANCELLED_OR_RESCHEDULED"?"CANCELLED OR RESCHEDULED":"UNCONFIRMED"}
+function fillRp(){var n={};DB.saved.forEach(function(x){n[x.name||x.title]=1});DB.interests.forEach(function(x){n[x.celeb]=1});DB.recent.forEach(function(x){n[x.title]=1});$("rp_dl").innerHTML=Object.keys(n).filter(Boolean).map(function(x){return '<option value="'+esc(x)+'">'}).join("")}
+function fetchProf(title){return get("https://en.wikipedia.org/api/rest_v1/page/summary/"+encodeURIComponent(title.replace(/ /g,"_"))).then(function(s0){
+ var P={title:s0.title,name:s0.title,desc:s0.description||"",extract:s0.extract||"",thumb:s0.thumbnail&&s0.thumbnail.source,url:s0.content_urls&&s0.content_urls.desktop.page,qid:s0.wikibase_item,occ:[],nat:[],genre:[],site:"",social:[],born:""};
+ if(!P.qid)return P;
+ return get("https://www.wikidata.org/w/api.php?action=wbgetentities&format=json&origin=*&props=claims&ids="+P.qid).then(function(d){var c=((d.entities||{})[P.qid]||{}).claims||{},oi=ids(c,"P106"),ni=ids(c,"P27"),gi=ids(c,"P136"),w=claim(c,"P856")[0],b=claim(c,"P569")[0];
+  if(w&&/^https?:\/\//.test(w))P.site=w;if(b&&b.time)P.born=b.time.replace(/^\+/,"").slice(0,10);
+  [["P2003","Instagram","https://www.instagram.com/"],["P2002","X / Twitter","https://x.com/"],["P2013","Facebook","https://www.facebook.com/"],["P7085","TikTok","https://www.tiktok.com/@"],["P2397","YouTube","https://www.youtube.com/channel/"]].forEach(function(x){var v=claim(c,x[0])[0];if(typeof v==="string"&&/^[\w.\-]+$/.test(v))P.social.push({n:x[1],u:x[2]+v})});
+  return labels(oi.concat(ni,gi)).then(function(m){P.occ=oi.map(function(i){return m[i]}).filter(Boolean);P.nat=ni.map(function(i){return m[i]}).filter(Boolean);P.genre=gi.map(function(i){return m[i]}).filter(Boolean);return P})}).catch(function(){return P})})}
+var RP=null;
+function rpGo(){var n=$("rp_name").value.trim(),o=$("rp_out");if(!n){toast("Type a celebrity name first");return}
+ busy(o,"Building the report…");
+ var sv=DB.saved.filter(function(x){return(x.name||x.title).toLowerCase()===n.toLowerCase()})[0];
+ (sv?Promise.resolve(sv.title):get(W+"action=query&list=search&srlimit=1&srsearch="+encodeURIComponent(n)).then(function(r){var h=r.query&&r.query.search[0];if(!h)throw new Error("Couldn’t find “"+n+"” on Wikipedia. Check the spelling.");return h.title})).then(function(title){
+  var inc={events:$("rp_ev").checked,popularity:$("rp_pop").checked,interests:$("rp_int").checked},R={generated:new Date().toISOString(),celebrity:title,sections:inc,
+   limitations:["Biography and facts come from Wikipedia and Wikidata and are not independently verified.","Wikipedia page views measure public interest, not fans, ticket sales or buying intent.","Ticketmaster does not list every event, so missing events do not mean none exist.","Interest suggestions are research ideas. They are not Meta advertising interests until confirmed in Ads Manager."]};
+  return fetchProf(title).then(function(P){R.profile=P;var jobs=[];
+   if(inc.events){if(!WK)R.events={included:false,reason:"The event service is not connected."};else jobs.push(wcached("/events?"+evQS({kw:title,days:90})).then(function(d){var seen={},ev=(d.events||[]).filter(function(e){var k=(e.artist+"|"+e.date+"|"+e.venue).toLowerCase();if(seen[k])return false;seen[k]=1;return true});R.events={included:true,windowDays:90,source:"Ticketmaster Discovery API",checked:ev[0]?ev[0].checked:new Date().toISOString(),items:ev}}).catch(function(e){R.events={included:false,reason:e.message}}))}
+   if(inc.popularity)jobs.push(pv(title).then(function(x){R.popularity={included:true,metric:"English Wikipedia page views per day, human readers",dataThrough:x.end,daysWithData:x.n,days:x.a,stats:x.n?pvStats(x):null,_x:x}}).catch(function(e){R.popularity={included:false,reason:e.message}}));
+   return Promise.all(jobs).then(function(){if(inc.interests){var mine=function(c){return c===title||c===n};R.interests=DB.interests.filter(function(r){return mine(r.celeb)}).map(function(r){return{interest:r.name,category:r.cat,type:r.type,status:iLabel(r),method:r.method||"",lastChecked:r.date||"",whySuggested:r.why||"",source:r.src||"",notes:r.notes||""}});R.notes=DB.notes.filter(function(x){return mine(x.celeb)}).map(function(x){return{title:x.title||"Note",date:x.date||"",text:x.body||""}})}
+    RP=R;rpShow(R)})})
+ }).catch(function(e){fail(o,e.message,rpGo)})}
+function tbl(h,rows){return '<div class="tw"><table><thead><tr>'+h.map(function(x){return '<th scope="col">'+x+'</th>'}).join("")+'</tr></thead><tbody>'+rows.map(function(r){return '<tr>'+r.map(function(c){return '<td>'+c+'</td>'}).join("")+'</tr>'}).join("")+'</tbody></table></div>'}
+function lk(u,t){return /^https?:\/\//.test(u||"")?'<a href="'+esc(u)+'" target="_blank" rel="noopener">'+esc(t)+'</a>':""}
+function rptHTML(R){var P=R.profile,h='<header><div class="rb">STARINTEL PRO · RESEARCH REPORT</div><h1>'+esc(P.name)+'</h1><div class="rm">'+esc(P.desc)+(P.desc?" · ":"")+'Generated '+esc(new Date(R.generated).toLocaleString())+'</div></header><div class="rn">Prepared from public sources. Every item is labelled by how well it is verified. Nothing here is a guarantee, and unverified items are marked as such.</div>';
+ h+='<h2>Profile</h2><div class="rrow">'+(P.thumb?'<img alt="Photo of '+esc(P.name)+'" src="'+esc(P.thumb)+'">':'')+'<div><p>'+esc(P.extract||"No biography available.")+'</p><div class="sm">Source: Wikipedia and Wikidata (not independently verified).</div></div></div>'
+ +tbl(["Field","Value"],[["Occupation",esc(P.occ.join(", ")||"Not listed")],["Nationality",esc(P.nat.join(", ")||"Not listed")],["Genre",esc(P.genre.join(", ")||"Not listed")],["Born",esc(P.born||"Not listed")],["Official website",lk(P.site,P.site)||"Not listed"],["Social links (listed on Wikidata, please verify)",P.social.length?P.social.map(function(x){return lk(x.u,x.n)}).join(" · "):"None listed"]]);
+ if(R.sections.events){h+='<h2>Upcoming events (next 90 days)</h2>';var E=R.events;
+  if(!E.included)h+='<p>Not included: '+esc(E.reason)+'</p>';
+  else if(!E.items.length)h+='<p>No events were found on Ticketmaster for the next 90 days. This does not mean none exist.</p><div class="sm">Checked '+esc(new Date(E.checked).toLocaleString())+'.</div>';
+  else h+=tbl(["Date","Event","Performer","Venue","Status","Source"],E.items.map(function(e){return[esc(e.date||"TBA")+(e.time?"<br>"+esc(e.time.slice(0,5))+" local":""),esc(e.name),esc(e.artist||"Not listed"),esc([e.venue,e.city,e.country].filter(Boolean).join(", ")),'<span class="tag">'+evLabel(e.status)+'</span>',lk(e.url,"Ticketmaster")]}))+'<div class="sm">Source: Ticketmaster Discovery API, checked '+esc(new Date(E.checked).toLocaleString())+'. VERIFIED means Ticketmaster lists the event as on sale or sold out and names this performer. UNCONFIRMED means the performer or status could not be confirmed. CANCELLED OR RESCHEDULED means Ticketmaster says so.</div>'}
+ if(R.sections.popularity){h+='<h2>Popularity</h2>';var Q=R.popularity;
+  if(!Q.included)h+='<p>Not included: '+esc(Q.reason)+'</p>';else if(!Q.stats)h+='<p>Wikimedia returned no page-view data for this article.</p>';
+  else{var st=Q.stats,x=Q._x;h+='<p>Metric: '+esc(Q.metric)+', last 60 days, data through '+esc(Q.dataThrough)+'. This measures public interest. It does not measure fans, ticket sales or buying intent.</p>'+(Q.daysWithData<60?'<p class="sm">Data exists for '+Q.daysWithData+' of 60 days; missing days count as zero.</p>':'')+chart(x,640,130)
+   +tbl(["Measure","Value"],[["Last 7 days, average per day",Math.round(st.a7).toLocaleString()+" ("+pctS(st.w)+" vs previous 7 days)"],["Last 30 days, average per day",Math.round(st.a30).toLocaleString()+" ("+pctS(st.mom)+" vs previous 30 days)"],["Peak day",esc(st.peak.d)+": "+st.peak.v.toLocaleString()+" views"],["Spikes (3x median and 500+ views)",st.spikes.length?st.spikes.map(function(p){return esc(p.d)+" ("+p.v.toLocaleString()+")"}).join(", "):"None"]])}}
+ if(R.sections.interests){h+='<h2>Suggested Facebook ad interests</h2><div class="rn">These are research ideas. A name appearing on Wikipedia or Facebook does not make it an interest in Meta Ads Manager. Only items marked VERIFIED AVAILABLE were confirmed through an authorized Meta method. CONFIRMED BY YOU means a person checked manually.</div>';
+  h+=R.interests.length?tbl(["Interest","Category","Status","Method","Last checked","Why suggested","Notes"],R.interests.map(function(r){return[esc(r.interest),esc(r.category),'<span class="tag">'+esc(r.status)+'</span>',esc(r.method||"None"),esc(r.lastChecked?r.lastChecked.slice(0,10):"Never"),esc(r.whySuggested)+(r.source?" "+lk(r.source,"(source)"):""),esc(r.notes)]})):'<p>No interest suggestions are saved for this celebrity.</p>';
+  if(R.notes.length)h+='<h3>Research notes</h3><ul>'+R.notes.map(function(n){return '<li><b>'+esc(n.date.slice(0,10))+'</b> '+esc(n.text)+'</li>'}).join("")+'</ul>'}
+ h+='<h2>Sources and limitations</h2><ul>'+(P.url?'<li>'+lk(P.url,"Wikipedia article")+'</li>':'')+(P.qid?'<li>'+lk("https://www.wikidata.org/wiki/"+P.qid,"Wikidata entry")+'</li>':'')+(R.sections.events&&R.events.included?'<li>Ticketmaster Discovery API</li>':'')+(R.sections.popularity?'<li>'+lk("https://pageviews.wmcloud.org/?project=en.wikipedia.org&pages="+encodeURIComponent(P.title.replace(/ /g,"_")),"Wikimedia Pageviews")+'</li>':'')+'</ul><ul class="sm">'+R.limitations.map(function(l){return '<li>'+esc(l)+'</li>'}).join("")+'</ul>';
+ return h}
+function dlf(name,type,text){var b=new Blob([text],{type:type}),a=document.createElement("a");a.href=URL.createObjectURL(b);a.download=name;document.body.appendChild(a);a.click();a.remove()}
+function rpCSV(R){var P=R.profile,rows=[["section","item","detail","status","source","last_checked"],["Report","Celebrity",P.name,"",P.url||"",R.generated],["Profile","Description",P.desc,"From Wikipedia/Wikidata, not independently verified",P.url||"",""],["Profile","Biography",P.extract,"From Wikipedia, not independently verified",P.url||"",""],["Profile","Occupation",P.occ.join("; "),"Wikidata","",""],["Profile","Genre",P.genre.join("; "),"Wikidata","",""],["Profile","Website",P.site,"Wikidata","",""]];
+ if(R.events)(R.events.included?R.events.items:[]).forEach(function(e){rows.push(["Event",(e.artist||"Performer not listed")+" - "+e.name,e.date+" "+(e.time||"")+" | "+[e.venue,e.city,e.country].filter(Boolean).join(", "),evLabel(e.status),e.url||"",e.checked||""])});
+ if(R.popularity&&R.popularity.stats){var st=R.popularity.stats,u="https://pageviews.wmcloud.org/";[["Average views per day, last 7 days",Math.round(st.a7)],["Average views per day, last 30 days",Math.round(st.a30)],["Change vs previous 7 days",pctS(st.w)],["Change vs previous 30 days",pctS(st.mom)],["Peak day",st.peak.d+" ("+st.peak.v+")"]].forEach(function(r){rows.push(["Popularity",r[0],r[1],"English Wikipedia page views, not fans or sales",u,R.popularity.dataThrough])})}
+ (R.interests||[]).forEach(function(r){rows.push(["Interest",r.interest,r.category+" | "+r.whySuggested+(r.notes?" | notes: "+r.notes:""),r.status,r.source,r.lastChecked])});
+ (R.notes||[]).forEach(function(n){rows.push(["Note",n.title,n.text,"User note","",n.date])});
+ return rows.map(function(r){return r.map(csvC).join(",")}).join("\n")}
+function rpShow(R){var o=$("rp_out"),base="starintel-report-"+R.profile.title.replace(/[^\w]+/g,"-").toLowerCase();
+ o.innerHTML='<div class="row noprint" style="justify-content:center;margin:0 0 12px"><button class="btn c" id="rp_pdf">Print / Save as PDF</button><button class="btn s" id="rp_csv">Download CSV</button><button class="btn s" id="rp_json">Download JSON</button></div><div class="note noprint" style="max-width:820px;margin:0 auto 12px">To make a PDF: tap Print, then choose “Save as PDF” as the printer.</div><article class="rpt" id="rpt">'+rptHTML(R)+'</article>';
+ $("rp_pdf").onclick=function(){window.print()};
+ $("rp_csv").onclick=function(){dlf(base+".csv","text/csv",rpCSV(R))};
+ $("rp_json").onclick=function(){var c=JSON.parse(JSON.stringify(R,function(k,v){return k==="_x"?undefined:v}));dlf(base+".json","application/json",JSON.stringify(c,null,2))}}
+$("rp_go").onclick=rpGo;
+
+var RT="";
+var RN={rise:"Who is getting more English Wikipedia page views this week than their recent baseline. This is attention, not fans or sales.",pop:"Ranked by Wikipedia page views last month. This shows public interest, not tours or ticket sales.",music:"Artists with concerts listed on Ticketmaster in the chosen window. This is ticketing data, not a popularity ranking.",com:"Comedy and theatre events listed on Ticketmaster. Public appearances show up only if Ticketmaster lists them.",rec:"Events that went on sale in the last 14 days. This is on-sale timing, not an official announcement date.",rnd:"One random pick, with the reason it was chosen."};
+function setRoute(r){RT=r;
+ document.querySelectorAll("#r_seg button").forEach(function(b){b.classList.toggle("on",b.dataset.r===r)});
+ $("r_note").textContent=RN[r];
+ $("r_pop").classList.toggle("hide",r!=="pop");$("r_rise").classList.toggle("hide",r!=="rise");$("ev").classList.toggle("hide",!(r==="music"||r==="com"||r==="rec"));$("r_rnd").classList.toggle("hide",r!=="rnd");
+ if(r==="pop"&&!D.items&&!$("dres").innerHTML)loadD();
+ if(r==="music"||r==="com"||r==="rec"){$("e_seg").value=r==="music"?"Music":r==="com"?"Arts & Theatre":"";$("e_recent").checked=r==="rec";$("e_kw").value="";$("e_go").click()}
+ if(r==="rnd")runRandom();if(r==="rise")runRise()}
+$("r_seg").addEventListener("click",function(e){var b=e.target.closest("[data-r]");if(b)setRoute(b.dataset.r)});
+function runRandom(){
+ var el=$("rnd");
+ if(WK){busy(el,"Looking for verified events…");
+  wcached("/events?days=90&segment=Music").then(function(d){
+   var v=(d.events||[]).filter(function(e){return e.status==="VERIFIED"&&e.artist});
+   if(!v.length){el.innerHTML='<div class="card note">No verified music events were returned, so there is nothing to pick from. Try Popular instead.</div>';return}
+   var names={};v.forEach(function(e){names[e.artist]=1});var n=Object.keys(names).length,e=v[Math.floor(Math.random()*v.length)];
+   el.innerHTML='<div class="note"><b>Why this result:</b> picked at random from '+n+' artist'+(n>1?'s':'')+' that have a VERIFIED Ticketmaster listing in the next 90 days. It is not a ranking.</div>'+evCard(e)+'<button class="btn s" id="rnd_open">Open profile</button>';
+   $("rnd_open").onclick=function(){openProfile(e.artist)};
+   el.querySelectorAll("[data-p]").forEach(function(a){a.onclick=function(x){x.preventDefault();openProfile(a.dataset.p)}})
+  }).catch(function(e){fail(el,e.message,runRandom)});return}
+ if(!D.items){busy(el,"Loading popularity data…");loadD();return}
+ var x=D.items[Math.floor(Math.random()*D.items.length)];
+ el.innerHTML='<div class="card">'+item({title:x.title,desc:x.desc,thumb:x.thumb})+'<p class="m" style="margin:10px 0 0"><b>Why this result:</b> picked at random from people in the top Wikipedia page-view list (#'+x.r+' in '+esc(D.period)+', '+x.v.toLocaleString()+' views). This is popularity only, not an event. Connect the event service to pick from verified events instead.</p></div>';bindItems(el)}
+$("rnd_go").onclick=runRandom;
+
+function recentAdd(p){DB.recent=(DB.recent||[]).filter(function(x){return x.title!==p.title});DB.recent.unshift({title:p.title,desc:p.desc||"",thumb:p.thumb||"",date:new Date().toISOString()});DB.recent=DB.recent.slice(0,8);save()}
+function rows(list,empty,extra){return list.length?list.map(function(p){return item(p,extra?extra(p):"")}).join(""):'<p class="m" style="margin:0">'+empty+'</p>'}
+function renderHome(){
+ var h=new Date().getHours();$("h_hi").textContent=h<12?"Good morning":h<18?"Good afternoon":"Good evening";
+ var c={avail:0,notfound:0,manual:0,expired:0},tot=DB.interests.length;DB.interests.forEach(function(r){c[iSt(r).k]++});
+ $("h_stats").innerHTML=[["Watchlist",DB.saved.length,"saved"],["Notes",DB.notes.length,"notes"],["Interests tracked",tot,"interests"],["Need verification",c.manual+c.expired,"interests"]].map(function(x){return '<button class="stat" data-v="'+x[2]+'"><span>'+x[1]+'</span>'+x[0]+'</button>'}).join("");
+ var col={avail:"var(--ok)",notfound:"var(--er)",manual:"var(--wr)",expired:"var(--mu)"};
+ $("h_prog").innerHTML=tot?'<div class="bar" role="img" aria-label="Interest verification progress">'+["avail","notfound","manual","expired"].map(function(k){return '<i style="width:'+(c[k]/tot*100)+'%;background:'+col[k]+'"></i>'}).join("")+'</div><div class="m">Available '+c.avail+' · Not found '+c.notfound+' · Needs check '+c.manual+' · Expired '+c.expired+'</div><p style="margin:10px 0 0"><button class="btn s" data-v="interests">Review interests</button></p>':'<p class="m" style="margin:0">No interests yet. Generate suggestions for a celebrity in Ads research.</p><p style="margin:10px 0 0"><button class="btn s" data-v="audience">Open Ads research</button></p>';
+ $("h_rec").innerHTML=rows(DB.recent||[],"Profiles you open will appear here.");bindItems($("h_rec"));
+ $("h_sav").innerHTML=rows(DB.saved.slice(0,5),"Open a profile and choose Add to watchlist.");bindItems($("h_sav"));
+ var hp=$("h_pop");
+ if(D.items){var top=D.items.slice().sort(function(a,b){return a.r-b.r}).slice(0,6);hp.innerHTML=rows(top,"",function(x){return '<span class="m" style="font-size:12px">#'+x.r+' · '+x.v.toLocaleString()+' page views in '+esc(D.period)+'</span>'})+'<p class="m" style="margin:10px 0 0">Page views show public interest only, not fans, sales or tours. See Discover → Rising now for 7-day trends.</p>';bindItems(hp)}
+ else{hp.innerHTML='<p class="m">Loads last month’s most-viewed public figures from Wikimedia (a few seconds).</p><button class="btn s" id="h_popb">Load popularity data</button>';$("h_popb").onclick=function(){this.disabled=true;this.textContent="Loading…";loadD();setTimeout(renderHome,15000)}}}
+function initHomeEv(){var e=$("h_ev");
+ if(!WK){e.innerHTML='<p class="m">Connect the event service to see verified concerts and events here.</p><button class="btn s" data-v="discover">Set up in Discover</button>';return}
+ e.innerHTML='<p class="m">Next 30 days, music events listed by Ticketmaster.</p><button class="btn s" id="h_evb">Show events</button><div id="h_evr"></div>';$("h_evb").onclick=function(){loadEv($("h_evr"),evQS({days:30,seg:"Music"}),5)}}
+$("h_form").addEventListener("submit",function(e){e.preventDefault();var q=$("h_q").value.trim();if(!q){toast("Type a name first");return}$("q").value=q;show("search");doSearch()});
+initHomeEv();show("home");
+window.__siOk=1;
+})();
+</script></body></html>
